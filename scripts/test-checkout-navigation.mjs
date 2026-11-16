@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {beginCheckout,postShop} from '../lib/checkout-client.ts';
+let opened=0,closed=0,navigated='';
+const fake={opener:{},closed:false,location:{replace(url){navigated=url}},close(){closed++}};
+globalThis.window={open(){opened++;return fake}};
+const navigation=beginCheckout();assert.equal(opened,1);assert.equal(fake.opener,null);
+assert.equal(navigation.open('https://checkout.infinitepay.io/salade_sinais/test'),'https://checkout.infinitepay.io/salade_sinais/test');assert.equal(navigated,'https://checkout.infinitepay.io/salade_sinais/test');
+for(const url of ['javascript:alert(1)','https://checkout.infinitepay.io.evil.test/x','https://user@checkout.infinitepay.io/x'])assert.throws(()=>navigation.open(url));
+navigation.cancel();assert.equal(closed,1);
+window.open=()=>null;assert.equal(beginCheckout().open('https://checkout.infinitepay.io/x'),'https://checkout.infinitepay.io/x');
+globalThis.fetch=async()=>new Response('<html>Unavailable</html>',{status:503});await assert.rejects(()=>postShop({action:'checkout'}),/Não foi possível/);
+globalThis.fetch=async()=>{throw Error('offline')};await assert.rejects(()=>postShop({}),/Consulte seus pedidos/);
+globalThis.fetch=async()=>Response.json({url:'https://checkout.infinitepay.io/x'});assert.equal((await postShop({})).url,'https://checkout.infinitepay.io/x');
+console.log('PASS: navigation before async request, popup fallback, trusted URL validation, safe errors. No real charges.');

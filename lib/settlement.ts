@@ -1,0 +1,18 @@
+import {isPaymentTest} from './payment-test';
+import {db,stmt,one,E} from './store';
+import {confirmedPayment} from './payments';
+export async function settle(ref:{order_nsu:string;transaction_nsu:string;slug:string},fetcher:typeof fetch=fetch,source:'webhook'|'return'|'reconciliation'='reconciliation'){
+ const bill=await one('SELECT * FROM installments WHERE id=?',ref.order_nsu);if(!bill||!E().INFINITEPAY_API_KEY)throw Error('Cobrança ou integração indisponível.');
+ const response=await fetcher('https://api.checkout.infinitepay.io/payment_check',{method:'POST',headers:{'Content-Type':'application/json','X-Api-Key':E().INFINITEPAY_API_KEY},body:JSON.stringify({handle:E().INFINITEPAY_HANDLE||'salade_sinais',...ref})});const d:any=await response.json();if(!confirmedPayment(response.ok,d,bill.amount))throw Error('Pagamento não confirmado ou valor divergente.');
+ const o=await one('SELECT * FROM orders WHERE id=?',bill.order_id);if(!o)throw Error('Pedido não encontrado.');if(!['pix','card'].includes(o.payment_mode)||!['pix','credit_card'].includes(d.capture_method)||o.payment_mode==='card'&&d.capture_method!=='credit_card'||d.capture_method==='credit_card'&&(!Number.isInteger(d.installments)||d.installments<1||d.installments>12)||isPaymentTest(o)&&o.payment_mode==='pix'&&d.capture_method!=='pix')throw Error('Modalidade divergente: requer conferência.');if(bill.paid&&bill.transaction!==ref.transaction_nsu)throw Error('Parcela já conciliada.');
+ return recordPayment(o,bill,ref.transaction_nsu,d.capture_method,[stmt('INSERT OR IGNORE INTO services(id,data) VALUES(?,?)','__confirmation-'+source+'-'+ref.transaction_nsu,JSON.stringify({orderId:o.id,billId:bill.id,source,technicalTest:isPaymentTest(o),confirmedAt:new Date().toISOString(),amount:Number(d.amount),paidAmount:Number.isSafeInteger(d.paid_amount)?d.paid_amount:null,installments:d.installments,captureMethod:d.capture_method}))]);
+}
+export async function recordPayment(o:any,bill:any,transaction:string,method:string,audit:any[]=[]){
+ if(bill.paid&&bill.transaction!==transaction)throw Error('Parcela já conciliada.');
+ const now=new Date().toISOString();await db().batch([...audit,
+ stmt('UPDATE installments SET paid=1,`transaction`=?,method=?,paid_at=COALESCE(paid_at,?) WHERE id=? AND (paid=0 OR `transaction`=?)',transaction,method,now,bill.id,transaction),
+ stmt('UPDATE orders SET paid_amount=(SELECT COALESCE(SUM(amount),0) FROM installments WHERE order_id=orders.id AND paid=1) WHERE id=?',o.id),
+ stmt("UPDATE orders SET paid=CASE WHEN paid_amount=total THEN 1 ELSE 0 END,status=CASE WHEN paid=1 OR status='Cancelado' THEN status WHEN paid_amount=total THEN 'Pagamento confirmado' WHEN paid_amount>0 THEN 'Aguardando quitação' ELSE status END,settled_at=CASE WHEN paid_amount=total THEN COALESCE(settled_at,?) ELSE settled_at END WHERE id=?",now,o.id),
+ stmt('UPDATE reservations SET expires=NULL WHERE order_id=? AND (expires IS NULL OR expires>?) AND EXISTS(SELECT 1 FROM orders WHERE id=? AND paid=1)',o.id,Date.now(),o.id),
+ stmt("INSERT INTO loyalty(id,owner,order_id,points,description,created) SELECT 'paid-'||id,owner,id,(SELECT COALESCE(SUM(CASE WHEN json_extract(value,'$.kind')='consulta' THEN COALESCE(json_extract(value,'$.points'),0)*json_extract(value,'$.qty') ELSE 0 END),0) FROM json_each(items)),'Pedido integralmente quitado',? FROM orders WHERE id=? AND paid=1 AND COALESCE(json_extract(customer,'$.technicalTest'),0)!=1 ON CONFLICT(order_id) DO NOTHING",now,o.id)]);
+ const result=await one('SELECT paid,paid_amount,total,status,settled_at FROM orders WHERE id=?',o.id);return {...result,orderId:o.id,balance:result.total-result.paid_amount};}

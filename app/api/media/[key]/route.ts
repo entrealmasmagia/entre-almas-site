@@ -1,0 +1,2 @@
+import {E} from '../../../../lib/store';
+export async function GET(r:Request,{params}:{params:Promise<{key:string}>}){const {key}=await params;if(!/^[a-f0-9-]{36}\.(jpg|png|webp)$/.test(key)||!E().BUCKET)return new Response(null,{status:404});const file=await E().BUCKET.get(key);return file?new Response(file.body,{headers:{'Content-Type':file.httpMetadata?.contentType||'application/octet-stream','Cache-Control':'public, max-age=86400','X-Content-Type-Options':'nosniff'}}):new Response(null,{status:404})}

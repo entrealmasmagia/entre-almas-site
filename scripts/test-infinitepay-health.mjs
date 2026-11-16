@@ -1,0 +1,12 @@
+import fs from 'node:fs';
+import ts from 'typescript';
+import assert from 'node:assert/strict';
+const source=fs.readFileSync('app/api/infinitepay/health/route.ts','utf8');
+let saved=null,calls=0;
+const secret='test-private-placeholder';
+const module={};
+const mock={E:()=>({INFINITEPAY_API_KEY:secret,PAYMENTS_ENABLED:'false'}),out:x=>x,one:async()=>saved?{data:saved}:null,stmt:(s,...args)=>({all:async()=>{saved=args[1];return{results:[{id:args[0]}]}},run:async()=>{saved=args[0]}})};
+const fetch=async(url,opts)=>{calls++;assert.equal(url,'https://api.checkout.infinitepay.io/payment_check');assert.equal(JSON.parse(opts.body).order_nsu,'EA-NONEXISTENT-TECHNICAL-CHECK');return {status:opts.headers['X-Api-Key']===secret?200:403,json:async()=>({success:false,paid:false})}};
+new Function('require','exports','fetch',ts.transpile(source,{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}))(()=>mock,module,fetch);
+const first=await module.GET();assert.equal(first.status,'authentication_accepted');assert.equal(first.paymentsEnabled,false);assert.equal(first.createsCharges,false);assert.ok(!JSON.stringify(first).includes(secret));await module.GET();assert.equal(calls,2);
+console.log('Health check: read-only official endpoint, secret redaction, invalid-key control, cache and disabled payments passed.');
