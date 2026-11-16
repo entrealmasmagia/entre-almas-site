@@ -1,6 +1,7 @@
 import {env} from 'cloudflare:workers';
 import {products,Product,commerceDefaults,duration} from './catalog';
 import {defaults} from './settings';
+import {verifyAdminSession} from './admin-auth';
 export {duration};
 export const E=()=>env as any;
 export const db=()=>{if(!E().DB)throw Error('Banco indisponível.');return E().DB as D1Database};
@@ -8,7 +9,8 @@ export const stmt=(sql:string,...args:any[])=>db().prepare(sql).bind(...args);
 export async function rows(sql:string,...args:any[]){return (await stmt(sql,...args).all()).results as any[]}
 export async function one(sql:string,...args:any[]){return await stmt(sql,...args).first() as any}
 export const identity=(r:Request)=>r.headers.get('oai-authenticated-user-id');
-export const admin=(r:Request)=>!!identity(r)&&(E().ADMIN_USER_ID?identity(r)===E().ADMIN_USER_ID:!!E().ADMIN_EMAIL&&r.headers.get('oai-authenticated-user-email')?.toLowerCase()===String(E().ADMIN_EMAIL).toLowerCase());
+
+export const admin=(r:Request)=>verifyAdminSession(r,String(E().ADMIN_SESSION_SECRET||''));
 export const out=(d:any,status=200)=>Response.json(d,{status,headers:{'Cache-Control':'no-store'}});
 export async function saved(id:string){const r=await one('SELECT data FROM services WHERE id=?',id);return r?JSON.parse(r.data):{}}
 export async function put(id:string,data:any){await stmt('INSERT INTO services(id,data) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data',id,JSON.stringify(data)).run()}
