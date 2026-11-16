@@ -11,6 +11,25 @@ export async function POST(request: Request) {
       return Response.json({ error: "Origem inválida." }, { status: 403 });
     }
 
+    const limiter = (env as any).LOGIN_RATE_LIMIT;
+
+    if (!limiter) {
+      return Response.json(
+        { error: "Proteção do login indisponível." },
+        { status: 503 }
+      );
+    }
+
+    const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+    const { success } = await limiter.limit({ key: `admin-login:${ip}` });
+
+    if (!success) {
+      return Response.json(
+        { error: "Muitas tentativas. Tente novamente mais tarde." },
+        { status: 429 }
+      );
+    }
+
     const secret = env.ADMIN_SESSION_SECRET as string;
     const password = env.ADMIN_PASSWORD as string;
 
