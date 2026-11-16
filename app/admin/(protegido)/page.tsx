@@ -1,10 +1,12 @@
 
 'use client';
 import {useEffect,useState} from 'react';
-import {defaults,labels} from '../../lib/settings';
-import {money,statuses,loyaltyPoints,duration,Product} from '../../lib/catalog';
-import {referenceRates,grossForNet} from '../../lib/commerce-rules';
-import BookingPicker from '../../components/BookingPicker';
+
+import {defaults,labels} from '../../../lib/settings';
+import {money,statuses,loyaltyPoints,duration,Product} from '../../../lib/catalog';
+import {referenceRates,grossForNet} from '../../../lib/commerce-rules';
+import BookingPicker from '../../../components/BookingPicker';
+
 const empty={name:'',description:'',indication:'',category:'Trabalhos espirituais',kind:'ritual',price:54700,fromPrice:54700,quoteOnly:false,requiresAssessment:false,active:true,image:'',duration:0,points:0,promotionPercent:0};
 export default function Admin(){const [data,setData]=useState<any>(null),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[tab,setTab]=useState('Pedidos'),[query,setQuery]=useState(''),[edit,setEdit]=useState<any>(null),[texts,setTexts]=useState<any>(defaults),[booking,setBooking]=useState<any>({}),[testUrl,setTestUrl]=useState('');
  async function load(){try{const r=await fetch('/api/shop?admin=1'),d:any=await r.json();if(r.status===401||r.status===403){window.location.replace('/admin/login');return}if(!r.ok)throw Error(d.error);setData(d);setTexts(d.settings);setError('')}catch(e){setError((e as Error).message)}}useEffect(()=>{load()},[]);
