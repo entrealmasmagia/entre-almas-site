@@ -73,6 +73,13 @@ export default defineConfig(async ({ command }) => {
         inspectorPort: false,
         config: {
           ...localBindingConfig,
+          
+          previews: {
+            d1_databases: localBindingConfig.d1_databases,
+            r2_buckets: localBindingConfig.r2_buckets,
+            ratelimits: localBindingConfig.ratelimits,
+          },
+
           ...(command === "serve"
             ? {
                 services: [
