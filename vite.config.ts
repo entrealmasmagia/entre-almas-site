@@ -18,11 +18,23 @@ const managedLinux = readExecutionProfile() === "managed-linux";
 const localBindingConfig = {
   main: "./worker/index.ts",
   compatibility_flags: ["nodejs_compat"],
+  
+  ratelimits: [
+    {
+      name: "LOGIN_RATE_LIMIT",
+      namespace_id: "1001",
+      simple: {
+        limit: 10,
+        period: 60,
+      },
+    },
+  ],
+
   d1_databases: d1
     ? [
         {
           binding: d1,
-          database_name: "site-creator-d1",
+          database_name: "entre-almas-db",
           database_id: SITE_CREATOR_PLACEHOLDER_DATABASE_ID,
         },
       ]
@@ -61,6 +73,13 @@ export default defineConfig(async ({ command }) => {
         inspectorPort: false,
         config: {
           ...localBindingConfig,
+          
+          previews: {
+            d1_databases: localBindingConfig.d1_databases,
+            r2_buckets: localBindingConfig.r2_buckets,
+            ratelimits: localBindingConfig.ratelimits,
+          },
+
           ...(command === "serve"
             ? {
                 services: [
